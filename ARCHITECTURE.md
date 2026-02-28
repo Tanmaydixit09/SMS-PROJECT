@@ -1,0 +1,407 @@
+# Student Management System - Architecture & Flow
+
+## System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Client Layer                             │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │  React Frontend (Port 3000)                                │  │
+│  │  • Login Page                                              │  │
+│  │  • Student Dashboard (view profile, courses)              │  │
+│  │  • Admin Dashboard (manage students, courses, enroll)     │  │
+│  │  • Context-based authentication                           │  │
+│  └────────────────────────────────────────────────────────────┘  │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │ HTTP Requests + JWT Token
+                           │
+┌──────────────────────────┴──────────────────────────────────────┐
+│                      Network Layer (CORS)                        │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+┌──────────────────────────┴──────────────────────────────────────┐
+│                       Server Layer                               │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │  Express.js API Server (Port 5000)                         │  │
+│  │                                                             │  │
+│  │  ┌──────────────────────────────────────────────────────┐  │  │
+│  │  │  Routes & Controllers                                │  │  │
+│  │  │  • /api/auth (register, login)                      │  │  │
+│  │  │  • /api/students (CRUD)                             │  │  │
+│  │  │  • /api/courses (CRUD)                              │  │  │
+│  │  │  • /api/enroll (manage enrollments)                 │  │  │
+│  │  └──────────────────────────────────────────────────────┘  │  │
+│  │                      ▲                                       │  │
+│  │                      │                                       │  │
+│  │  ┌──────────────────────────────────────────────────────┐  │  │
+│  │  │  Middleware Stack                                     │  │  │
+│  │  │  1. CORS Middleware                                 │  │  │
+│  │  │  2. JSON Parser                                     │  │  │
+│  │  │  3. Auth Middleware (JWT verification)              │  │  │
+│  │  │  4. Role Middleware (Admin/Student checks)          │  │  │
+│  │  │  5. Error Handler                                   │  │  │
+│  │  └──────────────────────────────────────────────────────┘  │  │
+│  └────────────────────────────────────────────────────────────┘  │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │ Queries & Updates
+                           │
+┌──────────────────────────┴──────────────────────────────────────┐
+│                      Database Layer                              │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │  MongoDB (Local or Cloud)                                  │  │
+│  │                                                             │  │
+│  │  Collections:                                              │  │
+│  │  • users      (id, name, email, password, role)          │  │
+│  │  • students   (userId, rollNumber, batchId, phone...)    │  │
+│  │  • courses    (name, code, description, credits...)      │  │
+│  │  • batches    (name, startYear, endYear, dept...)        │  │
+│  │  • enrollments (studentId, courseId, grade, status)      │  │
+│  └────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Authentication Flow
+
+```
+┌─────────────────┐
+│     USER        │
+└────────┬────────┘
+         │
+         │ 1. Enter credentials
+         ▼
+    ┌─────────────────────────────────────┐
+    │   POST /api/auth/register or login   │
+    └─────────────────────────────────────┘
+         │
+    ┌────┴─────────────────────────────────────────────┐
+    │                                                   │
+    ▼                                                   ▼
+┌──────────────────┐                          ┌──────────────────┐
+│  Verify Email    │                          │ Check Password   │
+│  Not Registered  │                          │ Against Hash     │
+└──────────────────┘                          └──────────────────┘
+    │                                                   │
+    ▼                                                   ▼
+┌──────────────────────────────────────────────────────────────┐
+│  2. Hash Password (bcryptjs) & Save to DB    OR   Compare    │
+│     Generate JWT Token                                        │
+└──────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────┐
+│  3. Return JWT Token to Frontend                │
+│     Token contains: userId, role, expiresAt    │
+└─────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────┐
+│  4. Frontend Stores Token in localStorage       │
+└─────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────┐
+│  5. All Future Requests Include Token           │
+│     Header: Authorization: Bearer <token>       │
+└─────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────┐
+│  6. Middleware Verifies Token                   │
+│     • Check signature using JWT_SECRET          │
+│     • Check expiration                          │
+│     • Extract user info from payload            │
+└─────────────────────────────────────────────────┘
+    │
+    ├─────────────────────────────┬──────────────────────┐
+    │ Valid?                       │ Invalid/Expired?     │
+    │                              │                      │
+    ▼                              ▼                      ▼
+┌──────────────┐          ┌──────────────────┐  ┌──────────────┐
+│ Allow Access │          │ Return 401 Error │  │ Redirect to  │
+│ Check Role   │          │ Unauthorized     │  │ Login        │
+└──────────────┘          └──────────────────┘  └──────────────┘
+    │
+    ├─────────────────┬──────────────────┐
+    │ Admin Role?     │ Student Role?    │
+    │                 │                  │
+    ▼                 ▼                  ▼
+┌─────────┐     ┌─────────┐      ┌──────────────┐
+│ Allow   │     │ Allow   │      │ Deny Access  │
+│ All Ops │     │ Limited │      │ Return 403   │
+│         │     │ Access  │      │ Forbidden    │
+└─────────┘     └─────────┘      └──────────────┘
+```
+
+---
+
+## Data Models Relationship
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                                                               │
+│                           USERS                              │
+│                    (Admin / Student)                         │
+│                                                               │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ _id, name, email, password, role, createdAt        │    │
+│  └─────────────────────────────────────────────────────┘    │
+│           │                             │                    │
+│           │ one-to-one                  │ one-to-one         │
+│           │                             │                    │
+│           ▼                             ▼                    │
+│      ┌─────────┐              ┌──────────────┐             │
+│      │STUDENTS │              │ ADMIN USERS  │             │
+│      └─────────┘              │(No Students) │             │
+│           │                   └──────────────┘             │
+│           │                                                 │
+│           │ many-to-one                                    │
+│           │                                                 │
+│           ▼                                                 │
+│      ┌─────────┐                                           │
+│      │ BATCHES │                                           │
+│      └─────────┘                                           │
+│                                                               │
+│      ┌──────────────────────────────────────────────┐       │
+│      │          ENROLLMENTS (Junction)               │       │
+│      │  • studentId (ref: STUDENTS)                 │       │
+│      │  • courseId (ref: COURSES)                   │       │
+│      │  • grade, status, enrollmentDate             │       │
+│      └──────────────────────────────────────────────┘       │
+│           ▲                       ▲                         │
+│           │ many-to-many         │ many-to-many           │
+│           │                       │                         │
+│      ┌────┴──────────┐       ┌───┴───────────┐            │
+│      │  STUDENTS     │       │   COURSES     │            │
+│      │               │       │               │            │
+│      │ • rollNumber  │       │ • name        │            │
+│      │ • batchId     │       │ • code        │            │
+│      │ • phone       │       │ • credits     │            │
+│      │ • address     │       │ • instructor  │            │
+│      │ • status      │       │ • semester    │            │
+│      └───────────────┘       └───────────────┘            │
+│                                                               │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Request-Response Flow Example
+
+### Admin Creates a Student
+
+```
+FRONTEND                          BACKEND                    DATABASE
+   │                               │                            │
+   │ POST /api/students           │                            │
+   │ { userId, rollNumber, ...}   │                            │
+   ├──────────────────────────────►                            │
+   │ + Header: Authorization:     │                            │
+   │   Bearer <admin_token>        │                            │
+   │                               │                            │
+   │                      Validate Token                        │
+   │                      ├─ Signature ok?                      │
+   │                      ├─ Not expired?                       │
+   │                      └─ Role = Admin?                      │
+   │                               │                            │
+   │                      Validate Input                        │
+   │                      ├─ All fields present?                │
+   │                      └─ No duplicates?                     │
+   │                               │                            │
+   │                      Create Student                        │
+   │                               ├────────────────────────────►
+   │                               │  Insert new document       │
+   │                               │                            │
+   │                               │◄────────────────────────────
+   │                               │  Return created document   │
+   │                               │                            │
+   │ 201 Created                   │                            │
+   │ { success, data, message }    │                            │
+   │◄──────────────────────────────┤                            │
+   │                               │                            │
+   ▼                               ▼                            ▼
+```
+
+---
+
+## Role-Based Access Control
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         USERS                               │
+│                    ┌──────────────┐                         │
+│                    │              │                         │
+│              ┌─────▼────┐    ┌────▼──────┐                 │
+│              │   ADMIN   │    │  STUDENT   │                │
+│              └─────┬─────┘    └────┬───────┘                │
+│                    │                │                       │
+│                    │                │                       │
+│    ┌───────────────┼────────────────┼───────────────┐      │
+│    │               │                │               │       │
+│    ▼               ▼                ▼               ▼       │
+│ REGISTER       LOGIN            VIEW OWN         VIEW OWN   │
+│ (public)       (public)          PROFILE         COURSES    │
+│                                  (only theirs)   (only theirs)
+│    │               │                │               │       │
+│    └───────────────┼────────────────┼───────────────┘      │
+│                    │                │                       │
+│ ┌──────────────────┼────────────────┼──────────────────┐  │
+│ │                  ▼                ▼                  │  │
+│ │            CREATE STUDENTS   NO ACCESS              │  │
+│ │            READ ALL          (except own)           │  │
+│ │            UPDATE STUDENTS                          │  │
+│ │            DELETE STUDENTS                          │  │
+│ │                                                     │  │
+│ │            CREATE COURSES                          │  │
+│ │            READ COURSES                            │  │
+│ │            UPDATE COURSES                          │  │
+│ │            DELETE COURSES                          │  │
+│ │                                                     │  │
+│ │            MANAGE ENROLLMENTS                      │  │
+│ │            ASSIGN GRADES                           │  │
+│ └────────────────────────────────────────────────────┘  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Error Handling Flow
+
+```
+REQUEST
+  │
+  ▼
+┌─────────────────────┐
+│ Parse Request       │
+└────────┬────────────┘
+         │
+    ┌────┴─────────────────────────────┐
+    │                                   │
+    ▼                                   ▼
+  Valid?                            Invalid
+    │                                   │
+    ▼                                   ▼
+┌──────────┐                    ┌─────────────────┐
+│ Continue │                    │ 400 Bad Request │
+└────┬─────┘                    │ Invalid input   │
+     │                          └─────────────────┘
+     ▼
+┌──────────────────┐
+│ Check Token      │
+└────────┬─────────┘
+         │
+    ┌────┴──────────────┐
+    │                   │
+    ▼                   ▼
+  Valid?          Missing/Invalid/Expired
+    │                   │
+    ▼                   ▼
+┌──────────┐    ┌──────────────────────┐
+│Continue  │    │ 401 Unauthorized     │
+└────┬─────┘    │ Invalid or expired   │
+     │          │ token                │
+     ▼          └──────────────────────┘
+┌──────────────────┐
+│ Check Role       │
+└────────┬─────────┘
+         │
+    ┌────┴──────────────┐
+    │                   │
+    ▼                   ▼
+  Allowed?         Not Allowed
+    │                   │
+    ▼                   ▼
+┌──────────┐    ┌──────────────────────┐
+│Execute   │    │ 403 Forbidden        │
+│Operation │    │ Insufficient perms   │
+└────┬─────┘    └──────────────────────┘
+     │
+     ▼
+┌──────────────────┐
+│ Access Database  │
+└────────┬─────────┘
+         │
+    ┌────┴──────────────┐
+    │                   │
+    ▼                   ▼
+ Success?         Database Error
+    │                   │
+    ▼                   ▼
+┌──────────┐    ┌──────────────────────┐
+│ 200/201  │    │ 500 Server Error     │
+│ Response │    │ Check logs           │
+│ with data│    └──────────────────────┘
+└──────────┘
+    │
+    ▼
+SEND TO CLIENT
+```
+
+---
+
+## Deployment Architecture (Optional)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      PRODUCTION                             │
+│                                                             │
+│  ┌───────────────────────────────────────────────────────┐ │
+│  │ Frontend: Vercel/Netlify                             │ │
+│  │ React App (Static Files + Client-side Routing)      │ │
+│  │ URL: https://sms-frontend.vercel.app               │ │
+│  └───────────────────────────────────────────────────────┘ │
+│                          │                                  │
+│                          │ API Calls                        │
+│                          ▼                                  │
+│  ┌───────────────────────────────────────────────────────┐ │
+│  │ Backend: Heroku / Railway / DigitalOcean            │ │
+│  │ Express Server (Scaled & Load Balanced)             │ │
+│  │ URL: https://sms-api.herokuapp.com                  │ │
+│  └───────────────────────────────────────────────────────┘ │
+│                          │                                  │
+│                          │ Database Queries                │
+│                          ▼                                  │
+│  ┌───────────────────────────────────────────────────────┐ │
+│  │ Database: MongoDB Atlas (Cloud)                     │ │
+│  │ Managed NoSQL Database with Automatic Backups       │ │
+│  │ URL: mongodb+srv://user:pwd@cluster.mongodb.net     │ │
+│  └───────────────────────────────────────────────────────┘ │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Performance Optimization Tips
+
+1. **Frontend:**
+   - Lazy load components
+   - Implement pagination for large lists
+   - Cache API responses
+
+2. **Backend:**
+   - Add database indexing
+   - Implement caching (Redis)
+   - Use connection pooling
+
+3. **Database:**
+   - Create indexes on frequently queried fields
+   - Archive old enrollments
+   - Monitor query performance
+
+4. **Security:**
+   - Use HTTPS in production
+   - Implement rate limiting
+   - Add CSRF protection
+   - Validate all inputs on backend
+
+---
+
+This architecture ensures:
+✅ Scalability - Easy to add features
+✅ Security - JWT + Role-based access
+✅ Maintainability - Clear separation of concerns
+✅ Reliability - Error handling at each layer
+✅ Performance - Optimized queries and caching
