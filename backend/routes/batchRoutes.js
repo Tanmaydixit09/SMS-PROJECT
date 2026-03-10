@@ -24,3 +24,4 @@ module.exports = router;
 
 //add  INSTALLATION.md to readme file 
 //add  INSTALLATION.md to git ignore file
+//add md files to git ignore
