@@ -1,7 +1,10 @@
-# SMS Project Resume TODO
+# Gitignore Update TODO
 
-## Priority 1: Batch Improvements (In Progress)
-- [x] Refactor frontend/src/pages/admin/Batches.js to use batchService from api.js
-- [x] Auto-update batch.totalStudents on student create/enroll/drop (enrollmentController, studentController)
-- [x] Add safe delete check in batchController.deleteBatch (check if students enrolled)
-- [ 
+- [x] Create root .gitignore with patterns for unnecessary files
+- [ ] Stage and commit .gitignore
+- [ ] Untrack tracked unnecessary files if any
+- [ ] Push changes
+- [ ] Verify status clean
+
+Updated: Added root .gitignore.
+
