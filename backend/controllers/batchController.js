@@ -135,14 +135,24 @@ const updateBatch = async (req, res) => {
 // @access  Admin only
 const deleteBatch = async (req, res) => {
   try {
-    const batch = await Batch.findByIdAndDelete(req.params.id);
-
+    const batch = await Batch.findById(req.params.id);
     if (!batch) {
       return res.status(404).json({
         success: false,
         message: 'Batch not found',
       });
     }
+
+    // Check if batch has students
+    const studentCount = await Student.countDocuments({ batchId: batch._id });
+    if (studentCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete batch. ${studentCount} student(s) are enrolled in this batch.`,
+      });
+    }
+
+    await Batch.findByIdAndDelete(req.params.id);
 
     res.status(200).json({
       success: true,

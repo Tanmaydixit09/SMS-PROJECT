@@ -26,7 +26,7 @@ const createStudent = async (req, res) => {
       });
     }
 
-    // Create student
+    // Create student and increment batch total
     const student = await Student.create({
       userId,
       rollNumber,
@@ -35,6 +35,11 @@ const createStudent = async (req, res) => {
       address,
       dateOfBirth,
     });
+
+    // Increment batch totalStudents
+    if (student.batchId) {
+      await Batch.findByIdAndUpdate(student.batchId, { $inc: { totalStudents: 1 } });
+    }
 
     await student.populate('userId batchId');
 
@@ -155,14 +160,20 @@ const updateStudent = async (req, res) => {
 // @access  Admin only
 const deleteStudent = async (req, res) => {
   try {
-    const student = await Student.findByIdAndDelete(req.params.id);
+  const student = await Student.findById(req.params.id).populate('batchId');
+  if (!student) {
+    return res.status(404).json({
+      success: false,
+      message: 'Student not found',
+    });
+  }
 
-    if (!student) {
-      return res.status(404).json({
-        success: false,
-        message: 'Student not found',
-      });
-    }
+  // Decrement batch totalStudents
+  if (student.batchId) {
+    await Batch.findByIdAndUpdate(student.batchId._id, { $inc: { totalStudents: -1 } });
+  }
+
+  await Student.findByIdAndDelete(req.params.id);
 
     res.status(200).json({
       success: true,

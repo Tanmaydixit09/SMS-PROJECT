@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { batchService } from '../../services/api';
 
 const Batches = () => {
   const [batches, setBatches] = useState([]);
@@ -14,11 +14,7 @@ const Batches = () => {
   });
   const [editing, setEditing] = useState(null);
 
-  const token = localStorage.getItem('token');
-  const api = axios.create({
-    baseURL: 'http://localhost:5000/api',
-    headers: { Authorization: `Bearer ${token}` }
-  });
+  // Using centralized batchService with token interceptor
 
   useEffect(() => {
     fetchBatches();
@@ -26,8 +22,8 @@ const Batches = () => {
 
   const fetchBatches = async () => {
     try {
-      const response = await api.get('/batches');
-      setBatches(response.data.data);
+      const response = await batchService.getAll();
+      setBatches(response.data.data || response.data);
       setLoading(false);
     } catch (err) {
       setError('Failed to fetch batches');
@@ -45,9 +41,9 @@ const Batches = () => {
       };
       
       if (editing) {
-        await api.put(`/batches/${editing._id}`, data);
+        await batchService.update(editing._id, data);
       } else {
-        await api.post('/batches', data);
+        await batchService.create(data);
       }
       fetchBatches();
       setShowForm(false);
@@ -77,7 +73,7 @@ const Batches = () => {
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this batch?')) {
       try {
-        await api.delete(`/batches/${id}`);
+        await batchService.delete(id);
         fetchBatches();
       } catch (err) {
         setError('Failed to delete batch');

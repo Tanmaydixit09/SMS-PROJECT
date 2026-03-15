@@ -50,6 +50,8 @@ const enrollStudent = async (req, res) => {
       courseId,
     });
 
+    // Note: Batch totalStudents is based on Student.batchId, not per enrollment
+
     await enrollment.populate('studentId courseId');
 
     res.status(201).json({

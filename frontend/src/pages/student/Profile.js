@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { studentService } from '../../services/api';
 
 const StudentProfile = () => {
   const [student, setStudent] = useState(null);
@@ -7,13 +7,7 @@ const StudentProfile = () => {
   const [error, setError] = useState('');
   const [user, setUser] = useState(null);
 
-  const token = localStorage.getItem('token');
   const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-  
-  const api = axios.create({
-    baseURL: 'http://localhost:5000/api',
-    headers: { Authorization: `Bearer ${token}` }
-  });
 
   useEffect(() => {
     setUser(storedUser);
@@ -22,8 +16,8 @@ const StudentProfile = () => {
 
   const fetchStudentProfile = async () => {
     try {
-      const response = await api.get('/students');
-      if (response.data.data.length > 0) {
+      const response = await studentService.getAll();
+      if (response.data.data && response.data.data.length > 0) {
         setStudent(response.data.data[0]);
       }
       setLoading(false);
